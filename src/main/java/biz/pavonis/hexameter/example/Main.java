@@ -39,8 +39,8 @@ import biz.pavonis.hexameter.exception.HexagonalGridCreationException;
 public class Main {
 
 	static HexagonalGrid hexagonGrid;
-	private static final int DEFAULT_GRID_WIDTH = 8;
-	private static final int DEFAULT_GRID_HEIGHT = 8;
+	private static final int DEFAULT_GRID_WIDTH = 15;
+	private static final int DEFAULT_GRID_HEIGHT = 15;
 	private static final int DEFAULT_RADIUS = 30;
 	private static final HexagonOrientation DEFAULT_ORIENTATION = HexagonOrientation.POINTY_TOP;
 	private static final HexagonGridLayout DEFAULT_GRID_LAYOUT = HexagonGridLayout.RECTANGULAR;
@@ -58,6 +58,7 @@ public class Main {
 	private static int movementRange;
 	private static Font font;
 	private static int fontSize;
+	private static boolean drawCoordinates;
 
 	/**
 	 * Simple sample usage of the hexameter framework.
@@ -79,7 +80,7 @@ public class Main {
 		gl_shell.marginWidth = 0;
 		gl_shell.marginHeight = 0;
 		shell.setLayout(gl_shell);
-		final Canvas canvas = new Canvas(shell, SWT.NONE);
+		final Canvas canvas = new Canvas(shell, SWT.DOUBLE_BUFFERED);
 		canvas.addMouseMoveListener(new MouseMoveListener() {
 			public void mouseMove(MouseEvent e) {
 			}
@@ -133,6 +134,7 @@ public class Main {
 				layoutCombo.add(layout.name());
 			}
 		}
+		layoutCombo.setText(DEFAULT_GRID_LAYOUT.name());
 		layoutCombo.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
@@ -202,13 +204,7 @@ public class Main {
 
 		// toggle neighbors
 		final Button toggleNeighborsCheck = new Button(grpControls, SWT.CHECK);
-		toggleNeighborsCheck.addMouseListener(new MouseAdapter() {
-			@Override
-			public void mouseUp(MouseEvent e) {
-				showNeighbors = toggleNeighborsCheck.getSelection();
-				canvas.redraw();
-			}
-		});
+
 		toggleNeighborsCheck.setLayoutData(new GridData(SWT.LEFT, SWT.CENTER, false, false, 2, 1));
 		toggleNeighborsCheck.setText("Toggle neighbors");
 
@@ -219,6 +215,28 @@ public class Main {
 			@Override
 			public void mouseUp(MouseEvent e) {
 				showMovementRange = toggleMovementRangeCheck.getSelection();
+				showNeighbors = !showMovementRange;
+				toggleNeighborsCheck.setSelection(showNeighbors);
+				canvas.redraw();
+			}
+		});
+		toggleNeighborsCheck.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseUp(MouseEvent e) {
+				showNeighbors = toggleNeighborsCheck.getSelection();
+				showMovementRange = !showNeighbors;
+				toggleMovementRangeCheck.setSelection(showMovementRange);
+				canvas.redraw();
+			}
+		});
+
+		final Button toggleDrawCoordinatesCheck = new Button(grpControls, SWT.CHECK);
+		toggleDrawCoordinatesCheck.setLayoutData(new GridData(SWT.LEFT, SWT.CENTER, false, false, 2, 1));
+		toggleDrawCoordinatesCheck.setText("Draw coordinates");
+		toggleDrawCoordinatesCheck.addMouseListener(new MouseAdapter() {
+			@Override
+			public void mouseUp(MouseEvent e) {
+				drawCoordinates = toggleDrawCoordinatesCheck.getSelection();
 				canvas.redraw();
 			}
 		});
@@ -276,6 +294,7 @@ public class Main {
 				prevSelected = null;
 				currSelected = null;
 				movementRange = 0;
+				drawCoordinates = false;
 			}
 
 			private void resetControls() {
@@ -288,6 +307,9 @@ public class Main {
 				toggleMovementRangeCheck.setSelection(false);
 				distanceText.setText("");
 				movementRangeSpinner.setSelection(0);
+				toggleDrawCoordinatesCheck.setSelection(false);
+				layoutCombo.setText(DEFAULT_GRID_LAYOUT.name());
+
 			}
 		});
 
@@ -330,73 +352,83 @@ public class Main {
 		});
 		canvas.addPaintListener(new PaintListener() {
 			Color darkBlue = shell.getDisplay().getSystemColor(SWT.COLOR_DARK_BLUE);
-			Color yellow = shell.getDisplay().getSystemColor(SWT.COLOR_YELLOW);
-			Color gray = shell.getDisplay().getSystemColor(SWT.COLOR_GRAY);
+			Color white = shell.getDisplay().getSystemColor(SWT.COLOR_WHITE);
 			Color darkGray = shell.getDisplay().getSystemColor(SWT.COLOR_DARK_GRAY);
-			Color black = shell.getDisplay().getSystemColor(SWT.COLOR_BLACK);
-			Color magenta = shell.getDisplay().getSystemColor(SWT.COLOR_MAGENTA);
+			Color yellow = shell.getDisplay().getSystemColor(SWT.COLOR_YELLOW);
+			Color red = shell.getDisplay().getSystemColor(SWT.COLOR_RED);
 
 			public void paintControl(PaintEvent e) {
 				e.gc.setLineWidth(2);
 				e.gc.setForeground(darkBlue);
-				e.gc.setBackground(yellow);
+				e.gc.setBackground(white);
 				e.gc.fillRectangle(new Rectangle(0, 0, shellWidth, shellHeight));
 
 				for (String key : hexagonGrid.getHexagons().keySet()) {
 					Hexagon hexagon = hexagonGrid.getHexagons().get(key);
 					SatelliteData data = hexagon.<SatelliteData> getSatelliteData();
 					if (data != null && data.isSelected()) {
+						if (showNeighbors) {
+							for (Hexagon hex : hexagonGrid.getNeighborsOf(hexagon)) {
+								drawNeighborHexagon(shell, e, hex);
+							}
+						}
+						if (showMovementRange) {
+							for (Hexagon hex : hexagonGrid.calculateMovementRangeFrom(hexagon, movementRange)) {
+								drawMovementRangeHexagon(shell, e, hex);
+							}
+						}
+					}
+					drawEmptyHexagon(shell, e, hexagon);
+				}
+				for (String key : hexagonGrid.getHexagons().keySet()) {
+					Hexagon hexagon = hexagonGrid.getHexagons().get(key);
+					SatelliteData data = hexagon.<SatelliteData> getSatelliteData();
+					if (data != null && data.isSelected()) {
 						drawFilledHexagon(shell, e, hexagon);
-					} else {
-						drawEmptyHexagon(shell, e, hexagon);
+					}
+					if (drawCoordinates) {
+						drawCoordinates(e, hexagon);
 					}
 				}
 			}
 
 			private void drawEmptyHexagon(final Shell shell, PaintEvent e, Hexagon hexagon) {
 				e.gc.setForeground(darkBlue);
-				e.gc.setBackground(yellow);
+				e.gc.setBackground(white);
 				e.gc.drawPolygon(convertToPointsArr(hexagon.getPoints()));
-				drawCoordinates(e, hexagon);
 			}
 
 			private void drawFilledHexagon(final Shell shell, PaintEvent e, Hexagon hexagon) {
-				e.gc.setForeground(yellow);
+				e.gc.setForeground(white);
 				e.gc.setBackground(darkBlue);
 				e.gc.fillPolygon(convertToPointsArr(hexagon.getPoints()));
-				drawCoordinates(e, hexagon);
-				if (showNeighbors) {
-					for (Hexagon hex : hexagonGrid.getNeighborsOf(hexagon)) {
-						drawNeighborHexagon(shell, e, hex);
-					}
-				}
-				if (showMovementRange) {
-					for (Hexagon hex : hexagonGrid.calculateMovementRangeFrom(hexagon, movementRange)) {
-						drawMovementRangeHexagon(shell, e, hex);
-					}
-				}
+				e.gc.setForeground(darkBlue);
+				e.gc.drawPolygon(convertToPointsArr(hexagon.getPoints()));
 			}
 
 			private void drawNeighborHexagon(final Shell shell, PaintEvent e, Hexagon hexagon) {
-				e.gc.setForeground(gray);
+				e.gc.setForeground(white);
 				e.gc.setBackground(darkGray);
 				e.gc.fillPolygon(convertToPointsArr(hexagon.getPoints()));
-				drawCoordinates(e, hexagon);
+				e.gc.setForeground(darkBlue);
+				e.gc.drawPolygon(convertToPointsArr(hexagon.getPoints()));
 			}
 
 			private void drawMovementRangeHexagon(Shell shell, PaintEvent e, Hexagon hexagon) {
-				e.gc.setForeground(black);
-				e.gc.setBackground(magenta);
+				e.gc.setForeground(darkBlue);
+				e.gc.setBackground(yellow);
 				e.gc.fillPolygon(convertToPointsArr(hexagon.getPoints()));
-				drawCoordinates(e, hexagon);
+				e.gc.setForeground(darkBlue);
+				e.gc.drawPolygon(convertToPointsArr(hexagon.getPoints()));
 			}
 
 			private void drawCoordinates(PaintEvent e, Hexagon hexagon) {
 				e.gc.setFont(font);
-				e.gc.drawText("x:" + hexagon.getGridX(), (int) hexagon.getCenterX() - fontSize, (int) (hexagon.getCenterY() - fontSize * 2.5));
-				e.gc.drawText("y:" + hexagon.getGridY(), (int) (hexagon.getCenterX() - fontSize * 2.8), (int) hexagon.getCenterY() + fontSize / 3);
+				e.gc.setForeground(red);
+				e.gc.drawString("x:" + hexagon.getGridX(), (int) hexagon.getCenterX() - fontSize, (int) (hexagon.getCenterY() - fontSize * 2.5), true);
+				e.gc.drawString("y:" + hexagon.getGridY(), (int) (hexagon.getCenterX() - fontSize * 2.8), (int) hexagon.getCenterY() + fontSize / 3, true);
 				int z = -(hexagon.getGridX() + hexagon.getGridY());
-				e.gc.drawText("z:" + z, (int) (hexagon.getCenterX()), (int) hexagon.getCenterY() + fontSize / 3);
+				e.gc.drawString("z:" + z, (int) (hexagon.getCenterX() + fontSize / 3), (int) hexagon.getCenterY() + fontSize / 3, true);
 			}
 
 			private int[] convertToPointsArr(Point[] points) {
