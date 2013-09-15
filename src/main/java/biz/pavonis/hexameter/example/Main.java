@@ -1,7 +1,5 @@
 package biz.pavonis.hexameter.example;
 
-import java.util.List;
-
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
@@ -16,12 +14,15 @@ import org.eclipse.swt.graphics.FontData;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.layout.RowLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Canvas;
 import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Spinner;
 import org.eclipse.swt.widgets.Text;
@@ -33,21 +34,23 @@ import biz.pavonis.hexameter.HexagonalGrid;
 import biz.pavonis.hexameter.HexagonalGridBuilder;
 import biz.pavonis.hexameter.Point;
 import biz.pavonis.hexameter.exception.HexagonNotFoundException;
+import biz.pavonis.hexameter.exception.HexagonalGridCreationException;
 
 public class Main {
 
 	static HexagonalGrid hexagonGrid;
-	private static final int DEFAULT_GRID_WIDTH = 7;
-	private static final int DEFAULT_GRID_HEIGHT = 7;
+	private static final int DEFAULT_GRID_WIDTH = 8;
+	private static final int DEFAULT_GRID_HEIGHT = 8;
 	private static final int DEFAULT_RADIUS = 30;
-	private static final HexagonOrientation DEFAULT_ORIENTATION = HexagonOrientation.POINTY;
+	private static final HexagonOrientation DEFAULT_ORIENTATION = HexagonOrientation.POINTY_TOP;
+	private static final HexagonGridLayout DEFAULT_GRID_LAYOUT = HexagonGridLayout.RECTANGULAR;
 
 	// since this is just a demo i did not bother to create its own object...
 	private static int gridWidth = DEFAULT_GRID_WIDTH;
 	private static int gridHeight = DEFAULT_GRID_HEIGHT;
 	private static int radius = DEFAULT_RADIUS;
 	private static HexagonOrientation orientation = DEFAULT_ORIENTATION;
-	private static HexagonGridLayout hexagonGridLayout = HexagonGridLayout.RECTANGULAR;
+	private static HexagonGridLayout hexagonGridLayout = DEFAULT_GRID_LAYOUT;
 	private static boolean showNeighbors = false;
 	private static boolean showMovementRange = false;
 	private static Hexagon prevSelected = null;
@@ -98,7 +101,7 @@ public class Main {
 			@Override
 			public void widgetSelected(SelectionEvent arg0) {
 				if (radioPointy.getSelection()) {
-					orientation = HexagonOrientation.POINTY;
+					orientation = HexagonOrientation.POINTY_TOP;
 					regenerateHexagonGrid(canvas);
 				}
 			}
@@ -115,7 +118,7 @@ public class Main {
 			@Override
 			public void widgetSelected(SelectionEvent arg0) {
 				if (radioFlat.getSelection()) {
-					orientation = HexagonOrientation.FLAT;
+					orientation = HexagonOrientation.FLAT_TOP;
 					regenerateHexagonGrid(canvas);
 				}
 			}
@@ -126,7 +129,9 @@ public class Main {
 		lblLayout.setText("Layout");
 		final Combo layoutCombo = new Combo(grpControls, SWT.NONE);
 		for (HexagonGridLayout layout : HexagonGridLayout.values()) {
-			layoutCombo.add(layout.name());
+			if (!HexagonGridLayout.HEXAGONAL.equals(layout)) {
+				layoutCombo.add(layout.name());
+			}
 		}
 		layoutCombo.addSelectionListener(new SelectionAdapter() {
 			@Override
@@ -267,7 +272,7 @@ public class Main {
 				radius = DEFAULT_RADIUS;
 				showNeighbors = false;
 				showMovementRange = false;
-				hexagonGridLayout = HexagonGridLayout.RECTANGULAR;
+				hexagonGridLayout = DEFAULT_GRID_LAYOUT;
 				prevSelected = null;
 				currSelected = null;
 				movementRange = 0;
@@ -337,14 +342,13 @@ public class Main {
 				e.gc.setBackground(yellow);
 				e.gc.fillRectangle(new Rectangle(0, 0, shellWidth, shellHeight));
 
-				for (List<Hexagon> hexagons : hexagonGrid.getHexagons()) {
-					for (Hexagon hexagon : hexagons) {
-						SatelliteData data = hexagon.<SatelliteData> getSatelliteData();
-						if (data != null && data.isSelected()) {
-							drawFilledHexagon(shell, e, hexagon);
-						} else {
-							drawEmptyHexagon(shell, e, hexagon);
-						}
+				for (String key : hexagonGrid.getHexagons().keySet()) {
+					Hexagon hexagon = hexagonGrid.getHexagons().get(key);
+					SatelliteData data = hexagon.<SatelliteData> getSatelliteData();
+					if (data != null && data.isSelected()) {
+						drawFilledHexagon(shell, e, hexagon);
+					} else {
+						drawEmptyHexagon(shell, e, hexagon);
 					}
 				}
 			}
@@ -422,9 +426,25 @@ public class Main {
 		FontData fd = canvas.getDisplay().getSystemFont().getFontData()[0];
 		fontSize = (int) (radius / 3.5);
 		font = new Font(canvas.getDisplay(), fd.getName(), fontSize, SWT.NONE);
-		hexagonGrid = new HexagonalGridBuilder().setGridWidth(gridWidth).setGridHeight(gridHeight).setRadius(radius).setOrientation(orientation).setGridLayout(hexagonGridLayout)
-				.build();
-		// System.out.println(hexagonGrid);
+		try {
+			hexagonGrid = new HexagonalGridBuilder().setGridWidth(gridWidth).setGridHeight(gridHeight).setRadius(radius).setOrientation(orientation)
+					.setGridLayout(hexagonGridLayout).build();
+		} catch (HexagonalGridCreationException e) {
+			final Shell dialog = new Shell(canvas.getShell(), SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL);
+			dialog.setLayout(new RowLayout());
+			Label msg = new Label(dialog, SWT.NONE);
+			msg.setText(e.getMessage());
+			final Button ok = new Button(dialog, SWT.PUSH);
+			ok.setText("Ok");
+			Listener listener = new Listener() {
+				public void handleEvent(Event event) {
+					dialog.close();
+				}
+			};
+			ok.addListener(SWT.Selection, listener);
+			dialog.pack();
+			dialog.open();
+		}
 		canvas.redraw();
 	}
 }
