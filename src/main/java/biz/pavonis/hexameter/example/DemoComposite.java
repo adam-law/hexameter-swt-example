@@ -1,5 +1,7 @@
 package biz.pavonis.hexameter.example;
 
+import java.util.HashMap;
+
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
@@ -28,30 +30,32 @@ import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Spinner;
 import org.eclipse.swt.widgets.Text;
 
-import biz.pavonis.hexameter.Hexagon;
-import biz.pavonis.hexameter.HexagonGridLayout;
-import biz.pavonis.hexameter.HexagonOrientation;
-import biz.pavonis.hexameter.HexagonalGrid;
-import biz.pavonis.hexameter.HexagonalGridBuilder;
-import biz.pavonis.hexameter.Point;
-import biz.pavonis.hexameter.exception.HexagonNotFoundException;
-import biz.pavonis.hexameter.exception.HexagonalGridCreationException;
+import biz.pavonis.hexameter.api.Hexagon;
+import biz.pavonis.hexameter.api.HexagonOrientation;
+import biz.pavonis.hexameter.api.HexagonalGrid;
+import biz.pavonis.hexameter.api.HexagonalGridBuilder;
+import biz.pavonis.hexameter.api.HexagonalGridCalculator;
+import biz.pavonis.hexameter.api.HexagonalGridLayout;
+import biz.pavonis.hexameter.api.Point;
+import biz.pavonis.hexameter.api.exception.HexagonNotFoundException;
+import biz.pavonis.hexameter.api.exception.HexagonalGridCreationException;
 
 public class DemoComposite extends Composite {
 
-	static HexagonalGrid hexagonGrid;
+	private HexagonalGrid hexagonalGrid;
+	private HexagonalGridCalculator hexagonalGridCalculator;
 	private static final int DEFAULT_GRID_WIDTH = 15;
 	private static final int DEFAULT_GRID_HEIGHT = 15;
 	private static final int DEFAULT_RADIUS = 30;
 	private static final HexagonOrientation DEFAULT_ORIENTATION = HexagonOrientation.POINTY_TOP;
-	private static final HexagonGridLayout DEFAULT_GRID_LAYOUT = HexagonGridLayout.RECTANGULAR;
+	private static final HexagonalGridLayout DEFAULT_GRID_LAYOUT = HexagonalGridLayout.RECTANGULAR;
 	private static final int CANVAS_WIDTH = 1000;
 
 	private int gridWidth = DEFAULT_GRID_WIDTH;
 	private int gridHeight = DEFAULT_GRID_HEIGHT;
 	private int radius = DEFAULT_RADIUS;
 	private HexagonOrientation orientation = DEFAULT_ORIENTATION;
-	private HexagonGridLayout hexagonGridLayout = DEFAULT_GRID_LAYOUT;
+	private HexagonalGridLayout hexagonGridLayout = DEFAULT_GRID_LAYOUT;
 	private boolean showNeighbors = false;
 	private boolean showMovementRange = false;
 	private Hexagon prevSelected = null;
@@ -120,16 +124,14 @@ public class DemoComposite extends Composite {
 		Label lblLayout = new Label(grpControls, SWT.NONE);
 		lblLayout.setText("Layout");
 		final Combo layoutCombo = new Combo(grpControls, SWT.NONE);
-		for (HexagonGridLayout layout : HexagonGridLayout.values()) {
-			if (!HexagonGridLayout.HEXAGONAL.equals(layout)) {
-				layoutCombo.add(layout.name());
-			}
+		for (HexagonalGridLayout layout : HexagonalGridLayout.values()) {
+			layoutCombo.add(layout.name());
 		}
 		layoutCombo.setText(DEFAULT_GRID_LAYOUT.name());
 		layoutCombo.addSelectionListener(new SelectionAdapter() {
 			@Override
 			public void widgetSelected(SelectionEvent e) {
-				hexagonGridLayout = HexagonGridLayout.valueOf(layoutCombo.getText());
+				hexagonGridLayout = HexagonalGridLayout.valueOf(layoutCombo.getText());
 				regenerateHexagonGrid(canvas);
 			}
 		});
@@ -317,7 +319,7 @@ public class DemoComposite extends Composite {
 			public void mouseUp(MouseEvent e) {
 				Hexagon hex = null;
 				try {
-					hex = hexagonGrid.getByPixelCoordinate(e.x, e.y);
+					hex = hexagonalGrid.getByPixelCoordinate(e.x, e.y);
 				} catch (HexagonNotFoundException ex) {
 					ex.printStackTrace();
 				}
@@ -337,7 +339,7 @@ public class DemoComposite extends Composite {
 
 			private void drawDistance() {
 				if (prevSelected != null) {
-					distanceText.setText(hexagonGrid.calculateDistanceBetween(prevSelected, currSelected) + "");
+					distanceText.setText(hexagonalGridCalculator.calculateDistanceBetween(prevSelected, currSelected) + "");
 				}
 			}
 		});
@@ -354,25 +356,25 @@ public class DemoComposite extends Composite {
 				e.gc.setBackground(white);
 				e.gc.fillRectangle(new Rectangle(0, 0, shellWidth, shellHeight));
 
-				for (String key : hexagonGrid.getHexagons().keySet()) {
-					Hexagon hexagon = hexagonGrid.getHexagons().get(key);
+				for (String key : hexagonalGrid.getHexagonGridByOffsetRange(0, 10, 0, 10).keySet()) {
+					Hexagon hexagon = hexagonalGrid.getHexagons().get(key);
 					SatelliteData data = hexagon.<SatelliteData> getSatelliteData();
 					if (data != null && data.isSelected()) {
 						if (showNeighbors) {
-							for (Hexagon hex : hexagonGrid.getNeighborsOf(hexagon)) {
+							for (Hexagon hex : hexagonalGrid.getNeighborsOf(hexagon)) {
 								drawNeighborHexagon(e.gc, hex);
 							}
 						}
 						if (showMovementRange) {
-							for (Hexagon hex : hexagonGrid.calculateMovementRangeFrom(hexagon, movementRange)) {
+							for (Hexagon hex : hexagonalGridCalculator.calculateMovementRangeFrom(hexagon, movementRange)) {
 								drawMovementRangeHexagon(e.gc, hex);
 							}
 						}
 					}
 					drawEmptyHexagon(e.gc, hexagon);
 				}
-				for (String key : hexagonGrid.getHexagons().keySet()) {
-					Hexagon hexagon = hexagonGrid.getHexagons().get(key);
+				for (String key : hexagonalGrid.getHexagons().keySet()) {
+					Hexagon hexagon = hexagonalGrid.getHexagons().get(key);
 					SatelliteData data = hexagon.<SatelliteData> getSatelliteData();
 					if (data != null && data.isSelected()) {
 						drawFilledHexagon(e.gc, hexagon);
@@ -414,11 +416,13 @@ public class DemoComposite extends Composite {
 			}
 
 			private void drawCoordinates(GC gc, Hexagon hexagon) {
+				int x = hexagon.getGridX();
+				int y = hexagon.getGridY();
+				int z = -(x + y);
 				gc.setFont(font);
 				gc.setForeground(red);
-				gc.drawString("x:" + hexagon.getGridX(), (int) hexagon.getCenterX() - fontSize, (int) (hexagon.getCenterY() - fontSize * 2.5), true);
-				gc.drawString("y:" + hexagon.getGridY(), (int) (hexagon.getCenterX() - fontSize * 2.8), (int) hexagon.getCenterY() + fontSize / 3, true);
-				int z = -(hexagon.getGridX() + hexagon.getGridY());
+				gc.drawString("x:" + x, (int) hexagon.getCenterX() - fontSize, (int) (hexagon.getCenterY() - fontSize * 2.5), true);
+				gc.drawString("y:" + y, (int) (hexagon.getCenterX() - fontSize * 2.8), (int) hexagon.getCenterY() + fontSize / 3, true);
 				gc.drawString("z:" + z, (int) (hexagon.getCenterX() + fontSize / 3), (int) hexagon.getCenterY() + fontSize / 3, true);
 			}
 
@@ -443,8 +447,10 @@ public class DemoComposite extends Composite {
 		fontSize = (int) (radius / 3.5);
 		font = new Font(canvas.getDisplay(), fd.getName(), fontSize, SWT.NONE);
 		try {
-			hexagonGrid = new HexagonalGridBuilder().setGridWidth(gridWidth).setGridHeight(gridHeight).setRadius(radius).setOrientation(orientation)
-					.setGridLayout(hexagonGridLayout).build();
+			HexagonalGridBuilder builder = new HexagonalGridBuilder().setGridWidth(gridWidth).setGridHeight(gridHeight).setRadius(radius).setOrientation(orientation)
+					.setGridLayout(hexagonGridLayout).setCustomStorage(new HashMap<String, Hexagon>());
+			hexagonalGrid = builder.build();
+			hexagonalGridCalculator = builder.buildCalculatorFor(hexagonalGrid);
 		} catch (HexagonalGridCreationException e) {
 			final Shell dialog = new Shell(canvas.getShell(), SWT.DIALOG_TRIM | SWT.APPLICATION_MODAL);
 			dialog.setLayout(new RowLayout());
