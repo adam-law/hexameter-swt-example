@@ -2,10 +2,10 @@ package biz.pavonis.hexameter.example;
 
 import java.text.NumberFormat;
 
-import biz.pavonis.hexameter.api.HexagonalGridLayout;
 import biz.pavonis.hexameter.api.HexagonOrientation;
 import biz.pavonis.hexameter.api.HexagonalGrid;
 import biz.pavonis.hexameter.api.HexagonalGridBuilder;
+import biz.pavonis.hexameter.api.HexagonalGridLayout;
 
 public class Benchmark {
 
@@ -24,6 +24,7 @@ public class Benchmark {
 
 	}
 
+	@SuppressWarnings("unused")
 	private static void testBuilding() {
 		int size = 2500;
 		HexagonalGridBuilder builder = new HexagonalGridBuilder();

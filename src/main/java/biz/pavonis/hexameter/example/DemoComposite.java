@@ -356,7 +356,7 @@ public class DemoComposite extends Composite {
 				e.gc.setBackground(white);
 				e.gc.fillRectangle(new Rectangle(0, 0, shellWidth, shellHeight));
 
-				for (String key : hexagonalGrid.getHexagonGridByOffsetRange(0, 10, 0, 10).keySet()) {
+				for (String key : hexagonalGrid.getHexagons().keySet()) {
 					Hexagon hexagon = hexagonalGrid.getHexagons().get(key);
 					SatelliteData data = hexagon.<SatelliteData> getSatelliteData();
 					if (data != null && data.isSelected()) {
